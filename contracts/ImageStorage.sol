@@ -28,4 +28,8 @@ contract ImageStorage {
     function getAllImageIds() public view returns (uint256[] memory) {
         return imageIds;
     }
+
+    function getImageIdsLength() public view returns (uint256) {
+        return imageIds.length;
+    }
 }

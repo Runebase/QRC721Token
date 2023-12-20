@@ -10,10 +10,10 @@ You can refer to [this article](https://medium.com/@qtumx/understanding-nft-non-
 # Deployment
 ## Prerequirements
 1. Install the [Solidity compiler](https://solidity.readthedocs.io/en/latest/installing-solidity.html#building-from-source). You'd better install it from a binary package or the source code.
-2. Install [Solar](https://github.com/qtumproject/solar). Solar is a smart contract deployment tool of Qtum.
+2. Install [Solar](https://github.com/runebase/solar). Solar is a smart contract deployment tool of Qtum.
 3. Download this project and install dependencies, like this:
 ```
-$ git clone https://github.com/qtumproject/QRC721Token.git
+$ git clone https://github.com/runebase/QRC721Token.git
 $ cd QRC721Token
 $ npm install
 ```
@@ -60,7 +60,7 @@ cli gasPrice 40 40
 See [example/cli](https://github.com/qtumproject/QRC721Token/tree/master/example/cli).
 
 ### Using Qtum QT
-1. Mint some QRC721 tokens. 
+1. Mint some QRC721 tokens.
     1. Choose "Smart Contracts-Send To" in Qtum QT.
     2. Copy the contract address and ABI to the form.
     3. Choose the function *mint* and fill the form with specified "to address" and "token id". (Here the address is in hex format, which you can use the command "fromhexaddress" or "tohexaddress" in "Help-Debug Window-Console" to transfer it from or to a base58 format)
