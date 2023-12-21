@@ -1,12 +1,13 @@
-pragma solidity ^0.5.0;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.6.0;
 
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v2.1.3/contracts/token/ERC721/ERC721Enumerable.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v2.1.3/contracts/token/ERC721/ERC721Metadata.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v2.1.3/contracts/token/ERC721/ERC721MetadataMintable.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.0/contracts/token/ERC721/ERC721.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.0/contracts/access/Ownable.sol";
+
 import "./IQRC721.sol";
 import "./ImageStorage.sol";
 
-contract QRC721 is IQRC721, ERC721Enumerable, ERC721Metadata, ERC721MetadataMintable {
+contract QRC721 is ERC721, Ownable {
     address public imageStorageAddress;
 
     // Struct to represent an attribute
@@ -18,59 +19,68 @@ contract QRC721 is IQRC721, ERC721Enumerable, ERC721Metadata, ERC721MetadataMint
     // Mapping from token ID to an array of attributes
     mapping(uint256 => Attribute[]) public tokenAttributes;
 
-    constructor(string memory name, string memory symbol, address _imageStorageAddress) ERC721Metadata(name, symbol) public {
+    // Mapping from token ID to item name
+    mapping(uint256 => string) public tokenItemNames;
+
+    constructor(string memory name, string memory symbol, address _imageStorageAddress) ERC721(name, symbol) public {
         imageStorageAddress = _imageStorageAddress;
     }
 
-    event TokenMinted(uint256 indexed tokenId, string base64Image, string attributeData);
+    event TokenMinted(uint256 indexed tokenId, string base64Image, string itemName, string attributeData);
 
     function mintWithAttributes(
         uint256 tokenId,
-        uint256 imageId,
+        string memory itemImageName,
+        string memory itemName,
         string memory attributeNames,
         string memory attributeValues
-    ) public onlyMinter {
-        require(imageId > 0, "Image ID must be greater than 0");
-
+    ) public onlyOwner {
         // Ensure that the token with the specified tokenId does not already exist
         require(!_exists(tokenId), "Token with this ID already exists");
 
         // Mint the token
         _mint(msg.sender, tokenId);
 
-        // Get the image from the storage contract
-        string memory base64Image = ImageStorage(imageStorageAddress).getImage(imageId);
+        // Get the image from the storage contract using itemImageName
+        string memory base64Image = ImageStorage(imageStorageAddress).getImage(itemImageName);
 
-        // Split attributeNames and attributeValues into arrays
-        string[] memory names = split(attributeNames, ',');
-        string[] memory values = split(attributeValues, ',');
+        // Split attributeNames into an array
+        string[] memory names = split(attributeNames, '|');
+
+        // Convert comma-separated attributeValues to an array of strings
+        string[] memory values = split(attributeValues, '|');
+
+        // Ensure that the number of attribute names matches the number of attribute values
+        require(names.length == values.length, "Mismatched attribute names and values");
 
         // Store attributes in the mapping
         storeAttributes(tokenId, names, values);
 
+        // Store the item name for the token
+        tokenItemNames[tokenId] = itemName;
+
         // Construct the full token URI using the retrieved image data and dynamic attributes
-        string memory fullURI = generateTokenURI(tokenId, base64Image, names, values);
+        string memory fullURI = generateTokenURI(tokenId, base64Image, names, values, itemName);
 
         // Set the token URI
         _setTokenURI(tokenId, fullURI);
 
         // Log the minting event
-        emit TokenMinted(tokenId, base64Image, generateTokenURI(tokenId, base64Image, names, values));
+        emit TokenMinted(tokenId, base64Image, itemName, generateTokenURI(tokenId, base64Image, names, values, itemName));
     }
 
-    function setImageStorageAddress(address _imageStorageAddress) external onlyMinter {
+    function setImageStorageAddress(address _imageStorageAddress) external onlyOwner {
         imageStorageAddress = _imageStorageAddress;
     }
 
     // Helper function to split a string into an array based on a delimiter
     function split(string memory str, bytes1 delimiter) internal pure returns (string[] memory) {
-        bytes memory strBytes = bytes(str);
-        uint256 length = strBytes.length;
+        uint256 length = bytes(str).length;
         uint256 count = 1;
 
         // Count the number of delimiters to determine the array length
         for (uint256 i = 0; i < length; i++) {
-            if (strBytes[i] == delimiter) {
+            if (bytes(str)[i] == delimiter) {
                 count++;
             }
         }
@@ -82,28 +92,32 @@ contract QRC721 is IQRC721, ERC721Enumerable, ERC721Metadata, ERC721MetadataMint
 
         // Split the string into parts
         for (uint256 i = 0; i < length; i++) {
-            if (strBytes[i] == delimiter) {
-                parts[j] = substring(str, start, i);
+            if (bytes(str)[i] == delimiter) {
+                // Avoid empty strings
+                if (i > start) {
+                    // Convert the part to a bytes memory and then to a string
+                    bytes memory partBytes = new bytes(i - start);
+                    for (uint256 k = start; k < i; k++) {
+                        partBytes[k - start] = bytes(str)[k];
+                    }
+                    parts[j] = string(partBytes);
+                    j++;
+                }
                 start = i + 1;
-                j++;
             }
         }
 
         // Last part
-        parts[j] = substring(str, start, length);
+        if (start < length) {
+            // Convert the last part to a bytes memory and then to a string
+            bytes memory partBytes = new bytes(length - start);
+            for (uint256 k = start; k < length; k++) {
+                partBytes[k - start] = bytes(str)[k];
+            }
+            parts[j] = string(partBytes);
+        }
 
         return parts;
-    }
-
-    // Helper function to extract a substring from a string
-    function substring(string memory str, uint256 startIndex, uint256 endIndex) internal pure returns (string memory) {
-        bytes memory strBytes = bytes(str);
-        require(startIndex < endIndex && endIndex <= strBytes.length, "Invalid indices");
-        bytes memory result = new bytes(endIndex - startIndex);
-        for (uint256 i = startIndex; i < endIndex; i++) {
-            result[i - startIndex] = strBytes[i];
-        }
-        return string(result);
     }
 
     // Helper function to store attributes in the mapping
@@ -119,12 +133,12 @@ contract QRC721 is IQRC721, ERC721Enumerable, ERC721Metadata, ERC721MetadataMint
     }
 
     // Helper function to generate token URI
-    function generateTokenURI(uint256 tokenId, string memory base64Image, string[] memory attributeNames, string[] memory attributeValues) internal pure returns (string memory) {
+    function generateTokenURI(uint256 tokenId, string memory base64Image, string[] memory attributeNames, string[] memory attributeValues, string memory itemName) internal pure returns (string memory) {
         // Retrieve the dynamic attributes for the token
         string memory uriAttributes = getAttributesString(attributeNames, attributeValues);
 
-        // Construct the full token URI using the retrieved image data and dynamic attributes
-        return string(abi.encodePacked("data:image;base64,", base64Image, "&tokenId=", toString(tokenId), uriAttributes));
+        // Include itemName in the URI
+        return string(abi.encodePacked("data:image;base64,", base64Image, "&tokenId=", toString(tokenId), "&name=", itemName, uriAttributes));
     }
 
     // Helper function to get dynamic attributes as a string
