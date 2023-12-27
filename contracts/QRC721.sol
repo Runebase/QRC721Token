@@ -9,6 +9,7 @@ import "./ImageStorage.sol";
 
 contract QRC721 is ERC721, Ownable {
     address public imageStorageAddress;
+    address[] public minters;
 
     // Struct to represent an attribute
     struct Attribute {
@@ -26,6 +27,38 @@ contract QRC721 is ERC721, Ownable {
         imageStorageAddress = _imageStorageAddress;
     }
 
+    modifier onlyMinter() {
+        require(isMinter(msg.sender), "Sender is not a minter");
+        _;
+    }
+
+    function isMinter(address _address) public view returns (bool) {
+        for (uint256 i = 0; i < minters.length; i++) {
+            if (minters[i] == _address) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function addMinter(address _minter) external onlyOwner {
+        require(!isMinter(_minter), "Address is already a minter");
+        minters.push(_minter);
+    }
+
+    function removeMinter(address _minter) external onlyOwner {
+        require(isMinter(_minter), "Address is not a minter");
+
+        for (uint256 i = 0; i < minters.length; i++) {
+            if (minters[i] == _minter) {
+                // Remove the minter from the array by swapping with the last element
+                minters[i] = minters[minters.length - 1];
+                minters.pop();
+                break;
+            }
+        }
+    }
+
     event TokenMinted(uint256 indexed tokenId, string base64Image, string itemName, string attributeData);
 
     function mintWithAttributes(
@@ -34,7 +67,7 @@ contract QRC721 is ERC721, Ownable {
         string memory itemName,
         string memory attributeNames,
         string memory attributeValues
-    ) public onlyOwner {
+    ) public onlyMinter {
         // Ensure that the token with the specified tokenId does not already exist
         require(!_exists(tokenId), "Token with this ID already exists");
 
@@ -69,7 +102,7 @@ contract QRC721 is ERC721, Ownable {
         emit TokenMinted(tokenId, base64Image, itemName, generateTokenURI(tokenId, base64Image, names, values, itemName));
     }
 
-    function setImageStorageAddress(address _imageStorageAddress) external onlyOwner {
+    function setImageStorageAddress(address _imageStorageAddress) external onlyMinter {
         imageStorageAddress = _imageStorageAddress;
     }
 
